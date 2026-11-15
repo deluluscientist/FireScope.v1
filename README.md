@@ -1,152 +1,549 @@
-FireScope
-Harmonized Global Active Fire Analysis
-An interactive geospatial application for exploring satellite-detected active fires, comparing MODIS and VIIRS observations, and examining the spatial and temporal distribution of fire activity.
-<p align="center">
-  <a href="https://fire-scope-v1.vercel.app/"><strong>Open the live FireScope application →</strong></a>
-</p>1. Project overview
-FireScope brings country-level fire statistics and satellite-derived active-fire detections into a single interactive 3D globe. It is designed as an exploratory analysis and visualization tool: users can inspect geographic patterns, compare satellite products, review regional burning calendars, and measure distances between locations and nearby detections.
+![FireScope Cover](cover.png)
 
-The application combines two data pathways:
-- Country analysis layer: a bundled GeoJSON feature collection containing country geometries and precomputed fire indicators.
-- Active-fire observation layer: date-specific detections retrieved server-side from the NASA Fire Information for Resource Management System (FIRMS) API.
-The two layers serve different purposes. The country layer provides a broad statistical overview, while the FIRMS layer provides selectable observations for a requested date window. The application does not treat the bundled country statistics as if they were recalculated from the currently selected FIRMS query.
-2. Scientific and analytical scope
-FireScope focuses on the spatial and temporal exploration of satellite-observed active-fire signals. A satellite fire detection is an observation flagged by a sensor's active-fire algorithm; it is not, by itself, a complete measurement of burned area, fire perimeter, fire duration, or fire impact.
+# FireScope
+### Harmonized Global Active Fire Analysis
 
-The application supports the following analytical dimensions:
-- Spatial distribution: country-level fire totals and area-normalized fire density, displayed on a global 3D globe.
-- Temporal distribution: monthly burning calendars and year-to-year comparisons for selected months.
-- Sensor comparison: separate views for MODIS and VIIRS products, including individual satellite selections.
-- Fire radiative power: FRP values associated with individual detections, expressed in megawatts (MW).
-- Day/night context: the day/night acquisition indicator supplied with the FIRMS detection records.
-- Proximity exploration: great-circle distance measurement and counts of detections near a user-defined line and buffer distance.
-These functions are intended for exploratory analysis and communication. They should not be interpreted as a validated operational fire-warning system or as a substitute for ground observations and specialist fire products.
-3. Satellite data sources
-NASA FIRMS
-The live detection workflow requests data from the NASA FIRMS area API. The implementation supports these product families:
-Sensor family	Satellite / platform selection	FIRMS product identifiers used
-MODIS	Terra and Aqua	MODIS_SP, MODIS_NRT
-VIIRS	Suomi NPP	VIIRS_SNPP_SP, VIIRS_SNPP_NRT
-VIIRS	NOAA-20	VIIRS_NOAA20_SP, VIIRS_NOAA20_NRT
-VIIRS	NOAA-21	VIIRS_NOAA21_SP, VIIRS_NOAA21_NRT
+**An Interactive Geospatial Application for Exploring Satellite-Detected Active Fires**
 
+[![Live Application](https://img.shields.io/badge/Live%20Application-Open%20FireScope-2ea44f?style=for-the-badge)](https://fire-scope-v1.vercel.app/)
+[![NASA FIRMS](https://img.shields.io/badge/Data-NASA%20FIRMS-0b5cad?style=for-the-badge)](https://firms.modaps.eosdis.nasa.gov/)
+[![TypeScript](https://img.shields.io/badge/Built%20With-TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-For a requested sensor and date, FireScope checks FIRMS product availability. It selects the science-quality archive product when the requested date falls within its available coverage; otherwise, it uses the corresponding near-real-time (NRT) product when available. A date with no available product coverage returns no detections for that source.
+**[Explore the Live Application →](https://fire-scope-v1.vercel.app/)**
 
-The application exposes filters for the combined MODIS family, Terra, Aqua, the combined VIIRS family, Suomi NPP, NOAA-20, and NOAA-21. The combined Harmonized option requests MODIS and all three supported VIIRS platform streams.
+---
 
-Official data access: NASA FIRMS
-4. Harmonization approach
-MODIS and VIIRS have different sensor characteristics, spatial resolutions, and observation systems. FireScope therefore uses a transparent spatial-temporal de-duplication rule to create a combined display layer. This is a practical merge for exploratory visualization; it is not a radiometric calibration, a cross-sensor retrieval correction, or a scientifically validated equivalence model.
+## 1. Project Overview
 
-The current implementation follows these steps:
-1. Normalize fields. FIRMS CSV rows are mapped to a shared record structure containing latitude, longitude, FRP, day/night flag, acquisition date, acquisition time, satellite, sensor, and source product.
-2. Build a comparison cell. Each record is assigned a key using its acquisition date, a two-hour UTC time bin, and latitude/longitude rounded to two decimal places (approximately 0.01° grid spacing; the ground distance represented by a longitude interval varies with latitude).
-3. Resolve likely duplicates. One record is retained for each key.
-4. Apply a deterministic preference. If a MODIS and VIIRS record occupy the same cell, VIIRS is preferred. If records from the same sensor compete for a cell, the record with the higher FRP is retained.
-5. Preserve source-level views. Users can switch back to individual sensor and satellite selections rather than using the merged layer.
-The number of removed records is exposed in the live-fire status and report data. Because the rule uses rounded coordinates and time bins, it can merge nearby but distinct detections or fail to merge detections that represent the same event. Results should therefore be described as likely duplicate removal, not definitive event matching.
-5. Country-level indicators
-The repository includes public/data/firms_country_analysis.geojson, a GeoJSON FeatureCollection with 192 country or territory features in the current bundled file. Its properties include:
-Indicator	Meaning in the interface
-total_fire_pixels	Total fire-pixel count in the supplied country analysis dataset
-fire_density_per_10k_km2	Fire-pixel density normalized per 10,000 km²
-peak_burning_month	Month with the highest recorded burning activity in the supplied analysis
-season_duration_months	Fire-season duration, in months, as supplied in the dataset
-autocorr_12month	12-month autocorrelation indicator, where available
-mean_frp_mw	Mean fire radiative power, in MW
-max_frp_mw	Maximum fire radiative power, in MW
-daytime_fire_pct	Percentage of detections classified as daytime observations
-area_km2	Country or territory area, in km²
+FireScope is an interactive geospatial application designed to explore, analyze, and visualize global active-fire activity using satellite-derived observations.
 
+The application integrates country-level fire statistics and live satellite-detected active-fire observations into an interactive 3D globe. It enables users to investigate geographic fire patterns, compare satellite observations, explore seasonal burning trends, and examine the spatial relationships between fire detections and selected locations.
 
-The GeoJSON file is consumed as a precomputed input. The repository does not currently include a reproducible country-statistics generation pipeline, source-period manifest, or full provenance record for every field in this file. Accordingly, the values should be cited as the bundled country analysis dataset until its upstream source, temporal coverage, processing definitions, and version are documented independently. Missing values are displayed as unavailable rather than inferred.
-6. Temporal analysis and geographic aggregation
-The burning calendar supports three geographic scopes:
-- Country: detections are spatially filtered against the selected country's GeoJSON geometry.
-- Continent: detections are requested within a regional bounding box and then filtered against the country geometries belonging to that continent.
-- World: detections are counted globally without country-boundary clipping.
-The timeline divides longer requests into windows of no more than five days, matching the request-window limit used by the FIRMS area API workflow. Completed windows are accumulated progressively and cached in the browser session to reduce repeated requests.
+FireScope combines two complementary data pathways:
 
-Important sampling distinction: country monthly calendars query the full selected year, and country historical comparisons query the full selected month for each year. For world and continent views, the current calendar samples the first day of each month; regional historical comparisons sample the first five days of the selected month in each year. These regional samples are not full-month or annual totals and must not be compared as though they were.
-7. Interactive features
-- Interactive 3D globe with country selection and hover details.
-- Country-level fire indicators and density classification.
-- Continent and minimum-density filters.
-- Live FIRMS detection retrieval for a selected date and a window of one to five days.
-- MODIS, Terra, Aqua, VIIRS, Suomi NPP, NOAA-20, NOAA-21, and harmonized source filters.
-- Country, continent, and world burning calendars.
-- Historical month comparisons across available years in the interface.
-- Two-point line measurement with distance in kilometres.
-- Count of displayed fire detections within a configurable buffer around the measured line.
-- CSV export for currently supported report data and a print-oriented report view.
-8. Data limitations and interpretation
-FireScope is an exploratory visualization prototype. The following limitations are important when interpreting its output:
-- Active-fire detections are sensor observations, not a direct count of individual fires. A single fire can produce multiple detections, and some fires may not be detected.
-- Cloud cover, overpass timing, sensor resolution, detection thresholds, and product selection can affect the observed pattern.
-- The MODIS–VIIRS harmonization is a deterministic de-duplication heuristic, not a sensor-calibration method or event-level fire reconstruction.
-- The live globe limits the number of plotted points to 60,000 for a request. The returned source total and displayed point count can therefore differ; the plotted set is a sampled subset when the source response exceeds the display limit.
-- Regional calendar sampling differs from country calendar sampling, as described above.
-- The bundled country GeoJSON lacks an in-repository provenance manifest and documented temporal coverage. Its indicators should not be combined with live detections as if they shared a common processing period.
-- A missing value means the indicator is unavailable in the input dataset; it does not mean zero fire activity.
-- Distance and nearby-detection tools are geometric summaries, not estimates of fire spread, threat, or risk.
-For research use, record the query date, selected product, date range, geographic scope, harmonization setting, and source-product identifiers alongside any exported result. Verify key findings against the original NASA product documentation and relevant ground or ancillary datasets before drawing operational conclusions.
-9. Technical architecture
-FireScope is a TypeScript web application built with:
-- React for the user interface.
-- TanStack Start / TanStack Router for application routing and server functions.
-- Vite for development and production builds.
-- globe.gl / Three.js for the interactive 3D globe.
-- D3 Geo for geographic bounds and point-in-polygon operations.
-- GeoJSON for country geometry and country-level attributes.
-- Zod for validating server-function inputs.
-- NASA FIRMS API for date-specific active-fire observations.
-The browser calls TanStack server functions for FIRMS requests. The FIRMS map key is read on the server and should never be exposed as a VITE_ variable. Country geometry is loaded from the bundled GeoJSON by default. An optional FastAPI-compatible backend URL is also supported for country and statistics endpoints; if it is not configured or unavailable, the application falls back to the bundled country GeoJSON for the country layer.
-10. Run locally
-Requirements
-- Node.js (an active LTS release is recommended)
-- npm
-- A NASA FIRMS MAP_KEY for live active-fire queries
-Install and start
+- **Country Analysis Layer:** A bundled GeoJSON FeatureCollection containing country geometries and precomputed fire-related indicators.
+- **Active-Fire Observation Layer:** Date-specific satellite detections retrieved server-side through the NASA Fire Information for Resource Management System (FIRMS) API.
+
+These layers serve different analytical purposes. The country analysis layer provides a broad statistical overview, while the FIRMS observation layer provides selectable satellite detections for a requested date range.
+
+Importantly, the bundled country-level indicators are not recalculated from the currently selected FIRMS query. The two datasets should therefore be interpreted independently.
+
+## 2. Scientific and Analytical Scope
+
+FireScope focuses on the spatial and temporal exploration of satellite-observed active-fire signals.
+
+An active-fire detection represents a satellite observation flagged by a sensor's active-fire detection algorithm. It does not necessarily represent an individual fire, a complete burned area, a fire perimeter, or the full duration and impact of a fire event.
+
+The application supports six primary analytical dimensions:
+
+| Dimension | Description |
+|---|---|
+| Spatial Distribution | Country-level fire totals and area-normalized fire density visualized on a global 3D globe. |
+| Temporal Distribution | Monthly burning calendars and year-to-year comparisons for selected months. |
+| Sensor Comparison | Separate observation views for MODIS and VIIRS products, including individual satellite platforms. |
+| Fire Radiative Power | FRP measurements associated with individual detections, expressed in megawatts (MW). |
+| Day/Night Context | Daytime and nighttime acquisition indicators supplied by FIRMS observation records. |
+| Proximity Analysis | Great-circle distance measurement and nearby detection counts within a configurable buffer around a user-defined line. |
+
+These capabilities are intended for exploratory analysis, research communication, and geospatial visualization.
+
+FireScope is not a validated operational fire-warning system and should not replace ground observations, official fire-monitoring services, or specialist fire products.
+
+## 3. Satellite Data Sources
+
+### 3.1 NASA FIRMS
+
+FireScope retrieves active-fire observations through the official NASA FIRMS Area API.
+
+The implementation supports the following satellite platforms and product identifiers:
+
+| Sensor Family | Satellite Platform | FIRMS Product Identifiers |
+|---|---|---|
+| MODIS | Terra | `MODIS_SP`, `MODIS_NRT` |
+| MODIS | Aqua | `MODIS_SP`, `MODIS_NRT` |
+| VIIRS | Suomi NPP | `VIIRS_SNPP_SP`, `VIIRS_SNPP_NRT` |
+| VIIRS | NOAA-20 | `VIIRS_NOAA20_SP`, `VIIRS_NOAA20_NRT` |
+| VIIRS | NOAA-21 | `VIIRS_NOAA21_SP`, `VIIRS_NOAA21_NRT` |
+
+### 3.2 Product Selection
+
+For each requested sensor and date, FireScope checks the availability of the corresponding FIRMS products.
+
+The application follows this selection strategy:
+
+1. Prefer the science-quality archive product when the requested date falls within its available coverage.
+2. Fall back to the corresponding Near Real-Time (NRT) product when the archive product is unavailable and NRT coverage exists.
+3. Return no detections for a source when neither product provides coverage for the requested date.
+
+The available source filters include:
+
+- Combined MODIS
+- Terra
+- Aqua
+- Combined VIIRS
+- Suomi NPP
+- NOAA-20
+- NOAA-21
+- Harmonized (MODIS + all supported VIIRS platforms)
+
+The Harmonized option requests observations from MODIS and all three supported VIIRS platforms before applying the application's de-duplication procedure.
+
+**Official Data Source:** [NASA Fire Information for Resource Management System (FIRMS)](https://firms.modaps.eosdis.nasa.gov/)
+
+## 4. MODIS–VIIRS Harmonization Approach
+
+MODIS and VIIRS differ in sensor characteristics, spatial resolution, observation systems, and detection capabilities.
+
+To provide a combined visualization layer, FireScope implements a deterministic spatial-temporal de-duplication heuristic.
+
+This approach is intended to reduce potentially overlapping observations in the combined display. It is not a radiometric calibration procedure, cross-sensor retrieval correction, or scientifically validated event-matching model.
+
+### 4.1 Harmonization Workflow
+
+The current implementation follows five steps:
+
+**Step 1 — Field Normalization**
+
+FIRMS CSV records are mapped into a shared data structure containing:
+
+- Latitude and longitude
+- Fire Radiative Power (FRP)
+- Day/night acquisition flag
+- Acquisition date and time
+- Satellite platform
+- Sensor family
+- Source product identifier
+
+**Step 2 — Spatial-Temporal Cell Assignment**
+
+Each observation is assigned a comparison key based on:
+
+- Acquisition date
+- Two-hour UTC time bin
+- Latitude rounded to two decimal places
+- Longitude rounded to two decimal places
+
+This creates an approximate spatial grid of 0.01° resolution. The corresponding ground distance of a longitude interval varies with latitude.
+
+**Step 3 — Potential Duplicate Identification**
+
+Observations sharing the same comparison key are treated as potential duplicates.
+
+**Step 4 — Deterministic Record Selection**
+
+When multiple records occupy the same comparison cell:
+
+- VIIRS is preferred over MODIS when observations from both sensor families compete.
+- When records from the same sensor family compete, the observation with the higher FRP is retained.
+
+**Step 5 — Source-Level Preservation**
+
+Users can switch back to individual sensor families and satellite platforms to inspect their original observation views independently of the combined layer.
+
+### 4.2 Harmonization Limitations
+
+The number of removed records is exposed through the live-fire status and report data.
+
+Because the procedure relies on rounded coordinates and fixed time bins, it may:
+
+- Merge nearby but distinct detections.
+- Fail to match observations representing the same fire event.
+- Introduce differences in the number of displayed detections between individual and combined sensor views.
+
+Consequently, the procedure should be described as **likely duplicate removal**, rather than definitive fire-event identification or cross-sensor equivalence.
+
+## 5. Country-Level Fire Indicators
+
+FireScope includes a precomputed country-level analysis dataset:
+
+`public/data/firms_country_analysis.geojson`
+
+The current bundled GeoJSON FeatureCollection contains 192 country or territory features.
+
+Each feature includes geographic geometry and selected fire-related indicators.
+
+| Indicator | Description |
+|---|---|
+| `total_fire_pixels` | Total fire-pixel count in the supplied country analysis dataset. |
+| `fire_density_per_10k_km2` | Fire-pixel density normalized per 10,000 km². |
+| `peak_burning_month` | Month with the highest recorded burning activity in the supplied analysis. |
+| `season_duration_months` | Fire-season duration, expressed in months. |
+| `autocorr_12month` | Twelve-month autocorrelation indicator, where available. |
+| `mean_frp_mw` | Mean Fire Radiative Power, expressed in MW. |
+| `max_frp_mw` | Maximum Fire Radiative Power, expressed in MW. |
+| `daytime_fire_pct` | Percentage of detections classified as daytime observations. |
+| `area_km2` | Country or territory area, expressed in km². |
+
+### 5.1 Dataset Provenance
+
+The GeoJSON file is consumed as a precomputed input.
+
+The current repository does not include:
+
+- A reproducible country-statistics generation pipeline.
+- A documented source-period manifest.
+- A complete provenance record for every indicator.
+- Independently documented processing definitions and dataset versioning.
+
+Therefore, these values should be referenced as belonging to the bundled country analysis dataset until their upstream sources, temporal coverage, and processing methodology are independently documented.
+
+Missing values are represented as unavailable rather than being inferred or replaced with zero.
+
+## 6. Temporal Analysis and Geographic Aggregation
+
+FireScope provides burning-calendar functionality across three geographic scopes.
+
+### 6.1 Geographic Scopes
+
+| Scope | Aggregation Method |
+|---|---|
+| Country | Detections are spatially filtered against the selected country's GeoJSON geometry. |
+| Continent | Detections are retrieved within a regional bounding box and subsequently filtered against the country geometries belonging to the selected continent. |
+| World | Detections are counted globally without country-boundary clipping. |
+
+### 6.2 Timeline Processing
+
+The timeline divides longer requests into smaller windows of no more than five days, following the request-window limit used by the FIRMS Area API workflow.
+
+Completed windows are accumulated progressively and cached within the browser session to reduce repeated API requests.
+
+### 6.3 Temporal Sampling Considerations
+
+The application uses different sampling strategies depending on the geographic scope.
+
+| Analysis | Country | World / Continent |
+|---|---|---|
+| Monthly Burning Calendar | Full selected year | First day of each month |
+| Historical Month Comparison | Full selected month for each year | First five days of the selected month in each year |
+
+This distinction is important when interpreting temporal results.
+
+World and continent samples are not complete monthly or annual totals. They should not be compared directly with full-period country-level results as though they represented equivalent observation windows.
+
+## 7. Interactive Features
+
+FireScope integrates geospatial visualization, satellite data exploration, temporal analysis, and reporting functionality.
+
+### 7.1 Global Geospatial Visualization
+
+- Interactive 3D globe with country selection.
+- Country hover information and fire indicators.
+- Country-level fire-density classification.
+- Continent and minimum-density filtering.
+
+### 7.2 Live Satellite Fire Monitoring
+
+- Live FIRMS observation retrieval for selected dates.
+- Configurable observation windows ranging from one to five days.
+- MODIS and VIIRS source selection.
+- Individual satellite platform filtering.
+- Harmonized multi-sensor observation view.
+
+### 7.3 Temporal and Historical Analysis
+
+- Country-level burning calendars.
+- Continent-level burning calendars.
+- Global burning calendars.
+- Historical comparisons across available years.
+- Monthly and year-to-year fire activity exploration.
+
+### 7.4 Fire Measurement and Proximity Analysis
+
+- Two-point geographic line measurement.
+- Great-circle distance calculation in kilometres.
+- Configurable buffer distance around the measured line.
+- Counting displayed fire detections within the selected buffer.
+
+### 7.5 Reporting and Data Export
+
+- CSV export for supported report data.
+- Print-oriented report view.
+- Harmonization statistics and removed-record reporting.
+
+## 8. Data Limitations and Interpretation
+
+FireScope is an exploratory research and visualization prototype. Its outputs should be interpreted within the limitations of satellite active-fire observations, source data, and implemented analytical procedures.
+
+### 8.1 Active-Fire Detection Limitations
+
+Active-fire detections are satellite observations, not direct counts of individual fires.
+
+A single fire may produce multiple detections, while some fires may remain undetected due to cloud cover, observation timing, sensor resolution, or detection thresholds.
+
+### 8.2 Cross-Sensor Harmonization Limitations
+
+The MODIS–VIIRS harmonization procedure is a deterministic de-duplication heuristic.
+
+It is not a sensor-calibration method, a validated event-matching algorithm, or a reconstruction of individual fire events.
+
+### 8.3 Visualization Limits
+
+The live globe limits the number of plotted points to 60,000 per request.
+
+Consequently:
+
+- The source response total may exceed the displayed point count.
+- When the source response exceeds the display limit, the plotted observations represent a sampled subset.
+- The number of plotted points should not be interpreted as the total number of source detections.
+
+### 8.4 Temporal Sampling Limitations
+
+Country, continent, and world burning calendars use different temporal sampling strategies.
+
+Regional samples must not be interpreted as complete monthly or annual totals.
+
+### 8.5 Country Dataset Provenance
+
+The bundled country-level GeoJSON does not currently include a complete provenance manifest or documented temporal coverage.
+
+Its indicators should not be combined with live FIRMS observations as if both datasets shared the same processing period or analytical methodology.
+
+### 8.6 Missing Values
+
+An unavailable indicator represents missing information in the input dataset. It does not indicate zero fire activity.
+
+### 8.7 Distance and Proximity Analysis
+
+Distance measurement and nearby-detection calculations are geometric summaries.
+
+They do not estimate fire propagation, fire-spread direction, threat levels, or wildfire risk.
+
+### 8.8 Research Recommendations
+
+For reproducible research, record the following information alongside exported results:
+
+- Query date.
+- Selected satellite product.
+- Requested date range.
+- Geographic scope.
+- Selected satellite platform.
+- Harmonization setting.
+- Source-product identifiers.
+- Temporal sampling method.
+
+Important findings should be verified against original NASA product documentation, ground observations, and relevant ancillary datasets before being used for operational or scientific conclusions.
+
+## 9. Technical Architecture
+
+FireScope is a TypeScript-based web application built around a modern geospatial visualization and server-side data retrieval architecture.
+
+### 9.1 Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| React | Component-based user interface. |
+| TypeScript | Type-safe application development. |
+| TanStack Start | Full-stack application framework and server functions. |
+| TanStack Router | Application routing. |
+| Vite | Development server and production build tooling. |
+| globe.gl | Interactive 3D globe visualization. |
+| Three.js | 3D rendering engine. |
+| D3 Geo | Geographic bounds and point-in-polygon operations. |
+| GeoJSON | Country geometries and country-level attributes. |
+| Zod | Server-function input validation. |
+| NASA FIRMS API | Satellite-derived active-fire observations. |
+
+### 9.2 Data Flow
+
+The application follows a server-mediated data retrieval workflow.
+
+1. The browser requests active-fire data through TanStack server functions.
+2. Server functions validate incoming parameters using Zod.
+3. The server accesses NASA FIRMS using the configured API key.
+4. Retrieved observations are normalized and processed.
+5. Harmonization is applied when the combined source is selected.
+6. Processed observations are returned to the browser for visualization and analysis.
+
+Country geometries and precomputed indicators are loaded from the bundled GeoJSON file by default.
+
+An optional FastAPI-compatible backend can provide country and statistics endpoints. If the external backend is not configured or becomes unavailable, FireScope falls back to the bundled country GeoJSON for its country analysis layer.
+
+### 9.3 Environment and API Security
+
+The NASA FIRMS API key is accessed server-side and must never be exposed through a browser-visible environment variable.
+
+In particular, do not prefix the FIRMS API key with `VITE_`.
+
+## 10. Run Locally
+
+### 10.1 Requirements
+
+Before running FireScope locally, ensure that the following are installed:
+
+- Node.js (an active LTS release is recommended).
+- npm.
+- A NASA FIRMS MAP_KEY for live active-fire queries.
+
+### 10.2 Installation
+
+Clone the repository:
+
+```bash
 git clone https://github.com/deluluscientist/FireScope.v1.git
+```
+
+Navigate to the project directory:
+
+```bash
 cd FireScope.v1
+```
+
+Install dependencies:
+
+```bash
 npm install
+```
+
+Start the development server:
+
+```bash
 npm run dev
-Open the local URL printed by Vite in the terminal.
-Environment configuration
-Configure the following variables in the deployment environment or a local server environment file as appropriate:
-Variable	Runtime	Required	Purpose
-FIRMS_MAP_KEY	Server only	Yes, for live FIRMS queries	Authenticates requests to NASA FIRMS. Never prefix this value with VITE_.
-VITE_API_BASE_URL	Browser-visible	No	Optional base URL for the external FastAPI-compatible country/statistics API. Leave empty to use the bundled GeoJSON country layer.
+```
 
+Open the local URL provided by Vite in your terminal.
 
-The repository includes .env.example for the optional public API base URL. Add FIRMS_MAP_KEY as a server-side environment variable in your local/deployment configuration. Do not commit secrets to Git.
-Build, test, and lint
+### 10.3 Environment Configuration
+
+Configure the following environment variables in your local or deployment environment.
+
+| Variable | Runtime | Required | Description |
+|---|---|---|---|
+| `FIRMS_MAP_KEY` | Server-side | Yes, for live FIRMS queries | Authenticates requests to NASA FIRMS. Must remain server-side. |
+| `VITE_API_BASE_URL` | Browser-visible | No | Optional base URL for the external FastAPI-compatible country/statistics API. Leave empty to use the bundled GeoJSON country layer. |
+
+The repository includes an `.env.example` file for the optional public API base URL.
+
+Add `FIRMS_MAP_KEY` separately as a server-side environment variable.
+
+**Never commit API keys or other secrets to the Git repository.**
+
+### 10.4 Build, Test, and Lint
+
+Build the production application:
+
+```bash
 npm run build
+```
+
+Preview the production build:
+
+```bash
 npm run preview
+```
+
+Run tests:
+
+```bash
 npm test
+```
+
+Run linting:
+
+```bash
 npm run lint
-11. Deployment
-The production application is deployed on Vercel:
+```
 
-Live application: https://fire-scope-v1.vercel.app/
+## 11. Deployment
 
-For live FIRMS features, configure FIRMS_MAP_KEY in the Vercel project’s server-side Environment Variables, then redeploy. If the optional external country API is used, set VITE_API_BASE_URL and redeploy so the value is included in the client build.
-12. Repository structure
+FireScope is deployed on Vercel.
+
+**Live Application:** https://fire-scope-v1.vercel.app/
+
+### 11.1 Vercel Environment Configuration
+
+For live FIRMS functionality:
+
+1. Open the FireScope project in Vercel.
+2. Navigate to Project Settings → Environment Variables.
+3. Add `FIRMS_MAP_KEY` as a server-side environment variable.
+4. If using an external country/statistics API, configure `VITE_API_BASE_URL`.
+5. Redeploy the application to apply the updated environment configuration.
+
+The FIRMS API key must remain server-side and must never be exposed to the browser.
+
+## 12. Repository Structure
+
+```text
 FireScope.v1/
+│
 ├── public/
 │   └── data/
-│       └── firms_country_analysis.geojson  # Bundled country analysis layer
+│       └── firms_country_analysis.geojson
+│
 ├── src/
-│   ├── components/                         # Globe, filters, panels, calendar, reports
-│   ├── hooks/                              # Country, timeline, and fire-data hooks
-│   ├── lib/                                # FIRMS access, harmonization, geometry, reports
-│   ├── routes/                             # TanStack Start routes
-│   ├── services/                           # Optional external API client
-│   └── types/                              # Shared TypeScript data contracts
+│   ├── components/
+│   │   └── Globe, filters, panels, calendar, reports
+│   │
+│   ├── hooks/
+│   │   └── Country, timeline, and fire-data hooks
+│   │
+│   ├── lib/
+│   │   └── FIRMS access, harmonization, geometry, reports
+│   │
+│   ├── routes/
+│   │   └── TanStack Start application routes
+│   │
+│   ├── services/
+│   │   └── Optional external API client
+│   │
+│   └── types/
+│       └── Shared TypeScript data contracts
+│
 ├── .env.example
 ├── package.json
 └── README.md
-13. Research and development status
-The current implementation provides interactive exploration, satellite-source selection, heuristic MODIS–VIIRS de-duplication, regional temporal summaries, distance measurement, and report-oriented export functionality. Planned improvements include stronger provenance documentation for the bundled country dataset, reproducible preprocessing scripts for country indicators, validation of cross-sensor matching choices, and expanded export and historical-comparison options.
-FireScope is an independent research and visualization project. NASA FIRMS data are accessed through the official service; FireScope is not a NASA product and does not imply NASA endorsement.
+```
+
+## 13. Research and Development Status
+
+The current implementation provides an integrated environment for global active-fire exploration through interactive geospatial visualization, satellite-source selection, heuristic cross-sensor de-duplication, regional temporal analysis, proximity measurement, and report-oriented data export.
+
+### 13.1 Current Capabilities
+
+- Interactive global 3D fire visualization.
+- Country-level fire statistics and density indicators.
+- NASA FIRMS active-fire data retrieval.
+- MODIS and VIIRS satellite observation comparison.
+- Multi-platform harmonized observation visualization.
+- Spatial-temporal de-duplication.
+- Country, continent, and world burning calendars.
+- Historical monthly comparisons.
+- Geographic distance and proximity analysis.
+- CSV export and print-oriented reporting.
+
+### 13.2 Planned Improvements
+
+Future development will focus on improving scientific reproducibility, data quality, and analytical capabilities.
+
+Planned improvements include:
+
+- Comprehensive provenance documentation for the bundled country-level dataset.
+- Reproducible preprocessing scripts for country-level fire indicators.
+- Validation and evaluation of cross-sensor matching strategies.
+- Expanded historical comparison capabilities.
+- Enhanced report generation and data export options.
+- Improved documentation of temporal sampling and analytical assumptions.
+
+## 14. Acknowledgements and Data Attribution
+
+FireScope uses satellite active-fire observations accessed through the official NASA Fire Information for Resource Management System (FIRMS).
+
+**Primary Data Source:** [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/)
+
+**Project Repository:** [GitHub – FireScope.v1](https://github.com/deluluscientist/FireScope.v1)
+
+**Live Application:** [FireScope](https://fire-scope-v1.vercel.app/)
+
+FireScope is an independent research and visualization project. It is not developed, operated, or endorsed by NASA. NASA FIRMS is acknowledged as the source of the satellite observation service used by this application.
+
+---
+
+<p align="center">
+  <strong>FireScope — Exploring Global Fire Activity Through Satellite Data and Geospatial Analysis.</strong>
+</p>
+
+<p align="center">
+  <a href="https://fire-scope-v1.vercel.app/">Open FireScope →</a>
+  &nbsp; | &nbsp;
+  <a href="https://github.com/deluluscientist/FireScope.v1">View Source Code →</a>
+</p>
